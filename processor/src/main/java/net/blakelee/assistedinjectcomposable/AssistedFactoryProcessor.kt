@@ -22,15 +22,6 @@ class AssistedFactoryProcessor(
 
         if (!symbols.iterator().hasNext()) return emptyList()
 
-        val assistedViewModelFile = codeGenerator.createNewFile(
-            dependencies = Dependencies(false, *resolver.getAllFiles().toList().toTypedArray()),
-            packageName = packageName,
-            fileName = "AssistedViewModel.kt"
-        )
-
-        generateAssistedViewModelFile(assistedViewModelFile)
-        assistedViewModelFile.close()
-
         val file: OutputStream = codeGenerator.createNewFile(
             // Make sure to associate the generated file with sources to keep/maintain it across incremental builds.
             // Learn more about incremental processing in KSP from the official docs:
@@ -215,13 +206,28 @@ class AssistedFactoryProcessor(
             file += "fun assisted$simpleReturnType(\n"
             file += generateParameters(parameters)
             file += """
-                ): $qualifiedReturnType {
+                ): $qualifiedReturnType { 
+                    val context = LocalContext.current as Activity
+                    val owner = LocalSavedStateRegistryOwner.current
+                    
                     val factory = EntryPointAccessors.fromActivity(
-                        LocalContext.current as Activity,
+                        context,
                         ${simpleReturnType}FactoryProvider::class.java
                     ).${simpleReturnType}Factory()
-                
-                    return AssistedViewModel { factory.$functionName($parameterNames) }
+                    
+                    return viewModel(
+                        factory = object : AbstractSavedStateViewModelFactory(
+                            owner,
+                            null
+                        ) {
+                            override fun <T : ViewModel> create(
+                                key: String,
+                                modelClass: Class<T>,
+                                handle: SavedStateHandle
+                            ): T {
+                                return factory.$functionName($parameterNames) as T
+                            }
+                        })
                 }
 
             """.trimIndent()
@@ -235,11 +241,16 @@ class AssistedFactoryProcessor(
                 import android.app.Activity
                 import androidx.compose.runtime.Composable
                 import androidx.compose.ui.platform.LocalContext
+                import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
+                import androidx.lifecycle.AbstractSavedStateViewModelFactory
+                import androidx.lifecycle.SavedStateHandle
+                import androidx.lifecycle.ViewModel
+                import androidx.lifecycle.viewmodel.compose.viewModel
                 import dagger.hilt.EntryPoint
                 import dagger.hilt.InstallIn
                 import dagger.hilt.android.EntryPointAccessors
                 import dagger.hilt.android.components.ActivityComponent
-
+                
                 
             """.trimIndent()
     }
