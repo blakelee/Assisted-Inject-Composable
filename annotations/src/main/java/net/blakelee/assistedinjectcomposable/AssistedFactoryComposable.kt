@@ -1,0 +1,4 @@
+package net.blakelee.assistedinjectcomposable
+
+@Target(AnnotationTarget.CLASS)
+annotation class AssistedFactoryComposable
