@@ -1,4 +1,4 @@
-package net.blakelee.assistedinjectcomposable
+package net.blakelee.assistedinjectcomposable.viewmodel
 
 import androidx.lifecycle.ViewModel
 import dagger.assisted.Assisted
@@ -10,7 +10,6 @@ class MainViewModel @AssistedInject constructor(
 ) : ViewModel() {
 
     @AssistedFactory
-    @AssistedFactoryComposable
     interface Factory {
         fun create(test: Int): MainViewModel
     }

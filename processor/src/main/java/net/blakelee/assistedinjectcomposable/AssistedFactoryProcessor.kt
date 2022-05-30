@@ -5,9 +5,9 @@ import com.google.devtools.ksp.symbol.*
 import com.google.devtools.ksp.validate
 import java.io.OutputStream
 
-private const val annotation = "AssistedFactoryComposable"
 private const val fileName = "AssistedComposableModule"
 private const val packageName = "net.blakelee.assistedinjectcomposable"
+private const val assistedAnnotation = "dagger.assisted.AssistedFactory"
 
 class AssistedFactoryProcessor(
     private val codeGenerator: CodeGenerator,
@@ -17,7 +17,7 @@ class AssistedFactoryProcessor(
 
     override fun process(resolver: Resolver): List<KSAnnotated> {
         val symbols = resolver
-            .getSymbolsWithAnnotation("$packageName.$annotation")
+            .getSymbolsWithAnnotation(assistedAnnotation)
             .filterIsInstance<KSClassDeclaration>()
 
         if (!symbols.iterator().hasNext()) return emptyList()
@@ -30,6 +30,8 @@ class AssistedFactoryProcessor(
             packageName = packageName,
             fileName = fileName
         )
+
+        generateImports(file)
 
         symbols.forEach { it.accept(Visitor(file), Unit) }
 
@@ -45,28 +47,7 @@ class AssistedFactoryProcessor(
 
     inner class Visitor(private val file: OutputStream) : KSVisitorVoid() {
         override fun visitClassDeclaration(classDeclaration: KSClassDeclaration, data: Unit) {
-            if (classDeclaration.classKind != ClassKind.INTERFACE) {
-                logger.error("Only interface can be annotated with @Function", classDeclaration)
-                return
-            }
-
-            classDeclaration.annotations
-                .firstOrNull { it.shortName.asString() == "AssistedFactory" }
-                ?: run {
-                    logger.error("Can only be used in conjunction with @AssistedFactory")
-                    return
-                }
-
-
-            // Getting the @AssistedFactoryComposable annotation object.
-            val annotation: KSAnnotation = classDeclaration.annotations.first {
-                it.shortName.asString() == annotation
-            }
-
             val factoryName = classDeclaration.qualifiedName?.asString() ?: return
-
-
-            generateImports(file)
 
             val functions = classDeclaration.getAllFunctions().filter {
                 it.simpleName.asString() !in listOf("equals", "hashCode", "toString")
@@ -105,32 +86,6 @@ class AssistedFactoryProcessor(
             }
 
         }
-
-        override fun visitPropertyDeclaration(property: KSPropertyDeclaration, data: Unit) {
-            // Generating argument name.
-            file += "Hello world"
-
-            val argumentName = property.simpleName.asString()
-            file += "    $argumentName: "
-
-            // Generating argument type.
-            val resolvedType: KSType = property.type.resolve()
-            file += resolvedType.declaration.qualifiedName?.asString() ?: run {
-                logger.error("Invalid property type", property)
-                return
-            }
-
-            // Generating generic parameters if any.
-            val genericArguments: List<KSTypeArgument> =
-                property.type.element?.typeArguments ?: emptyList()
-            visitTypeArguments(genericArguments)
-
-            // Handling nullability.
-            file += if (resolvedType.nullability == Nullability.NULLABLE) "?" else ""
-
-            file += ",\n"
-        }
-
 
         fun visitTypeArgument(typeArgument: KSTypeArgument): String {
             return buildString {
@@ -186,9 +141,10 @@ class AssistedFactoryProcessor(
 
         private fun generateProvider(returnType: String, factoryType: String) {
             file += """
+            
             @EntryPoint
             @InstallIn(ActivityComponent::class)
-            internal interface ${returnType}FactoryProvider {
+            internal interface ${returnType}_FactoryProvider {
                 fun ${returnType}Factory(): $factoryType
             }
             
@@ -212,7 +168,7 @@ class AssistedFactoryProcessor(
                     
                     val factory = EntryPointAccessors.fromActivity(
                         context,
-                        ${simpleReturnType}FactoryProvider::class.java
+                        ${simpleReturnType}_FactoryProvider::class.java
                     ).${simpleReturnType}Factory()
                     
                     return viewModel(
@@ -251,37 +207,10 @@ class AssistedFactoryProcessor(
                 import dagger.hilt.android.EntryPointAccessors
                 import dagger.hilt.android.components.ActivityComponent
                 
-                
             """.trimIndent()
-    }
-
-    private fun generateAssistedViewModelFile(file: OutputStream) {
-        file += """
-            package $packageName
-
-            import androidx.compose.runtime.Composable
-            import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
-            import androidx.lifecycle.AbstractSavedStateViewModelFactory
-            import androidx.lifecycle.SavedStateHandle
-            import androidx.lifecycle.ViewModel
-            import androidx.lifecycle.viewmodel.compose.viewModel
-            
-            @Composable
-            internal inline fun <reified T : ViewModel> AssistedViewModel(crossinline viewModel: () -> T) =
-                viewModel(
-                    factory = object : AbstractSavedStateViewModelFactory(
-                        LocalSavedStateRegistryOwner.current,
-                        null
-                    ) {
-                        override fun <T : ViewModel> create(
-                            key: String, modelClass: Class<T>, handle: SavedStateHandle
-                        ): T = viewModel() as T
-                    }
-                ) as T
-        """.trimIndent()
     }
 }
 
-operator fun StringBuilder.plusAssign(value: String) {
+private operator fun StringBuilder.plusAssign(value: String) {
     append(value)
 }
