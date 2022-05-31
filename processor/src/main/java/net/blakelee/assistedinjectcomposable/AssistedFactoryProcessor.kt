@@ -35,6 +35,9 @@ class AssistedFactoryProcessor(
 
         symbols.forEach { it.accept(Visitor(file), Unit) }
 
+        generatedGetAssistedFactory(file)
+        generateCreateAssistedViewModel(file)
+
         file.close()
         val unableToProcess = symbols.filterNot { it.validate() }.toList()
         return unableToProcess
@@ -84,7 +87,6 @@ class AssistedFactoryProcessor(
 
                 generateComposable(simpleReturnType, qualifiedReturnType, parameters, functionName)
             }
-
         }
 
         fun visitTypeArgument(typeArgument: KSTypeArgument): String {
@@ -163,51 +165,69 @@ class AssistedFactoryProcessor(
             file += generateParameters(parameters)
             file += """
                 ): $qualifiedReturnType { 
-                    val context = LocalContext.current as Activity
-                    val owner = LocalSavedStateRegistryOwner.current
+                    val factory = getAssistedFactory<${simpleReturnType}_FactoryProvider>()
+                        .${simpleReturnType}Factory()
                     
-                    val factory = EntryPointAccessors.fromActivity(
-                        context,
-                        ${simpleReturnType}_FactoryProvider::class.java
-                    ).${simpleReturnType}Factory()
-                    
-                    return viewModel(
-                        factory = object : AbstractSavedStateViewModelFactory(
-                            owner,
-                            null
-                        ) {
-                            override fun <T : ViewModel> create(
-                                key: String,
-                                modelClass: Class<T>,
-                                handle: SavedStateHandle
-                            ): T {
-                                return factory.$functionName($parameterNames) as T
-                            }
-                        })
+                    return createAssistedViewModel(LocalSavedStateRegistryOwner.current) {
+                        factory.$functionName($parameterNames)
+                    }
                 }
-
+                
             """.trimIndent()
         }
     }
 
     private fun generateImports(file: OutputStream) {
         file += """
-                package $packageName
-
-                import android.app.Activity
-                import androidx.compose.runtime.Composable
-                import androidx.compose.ui.platform.LocalContext
-                import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
-                import androidx.lifecycle.AbstractSavedStateViewModelFactory
-                import androidx.lifecycle.SavedStateHandle
-                import androidx.lifecycle.ViewModel
-                import androidx.lifecycle.viewmodel.compose.viewModel
-                import dagger.hilt.EntryPoint
-                import dagger.hilt.InstallIn
-                import dagger.hilt.android.EntryPointAccessors
-                import dagger.hilt.android.components.ActivityComponent
+            package $packageName
+            
+            import android.app.Activity
+            import androidx.compose.runtime.Composable
+            import androidx.compose.ui.platform.LocalContext
+            import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
+            import androidx.lifecycle.AbstractSavedStateViewModelFactory
+            import androidx.lifecycle.SavedStateHandle
+            import androidx.lifecycle.ViewModel
+            import androidx.lifecycle.viewmodel.compose.viewModel
+            import androidx.savedstate.SavedStateRegistryOwner
+            import dagger.hilt.EntryPoint
+            import dagger.hilt.InstallIn
+            import dagger.hilt.android.EntryPointAccessors
+            import dagger.hilt.android.components.ActivityComponent
                 
             """.trimIndent()
+    }
+
+    private fun generateCreateAssistedViewModel(file: OutputStream) {
+        file += """
+            
+            @Suppress("UNCHECKED_CAST")
+            @Composable
+            private inline fun <reified T : ViewModel> createAssistedViewModel(
+                owner: SavedStateRegistryOwner,
+                crossinline factory: () -> T
+            ): T {
+                return viewModel(
+                    factory = object : AbstractSavedStateViewModelFactory(owner, null) {
+                        override fun <T : ViewModel> create(
+                            key: String, modelClass: Class<T>, handle: SavedStateHandle
+                        ): T = factory() as T
+                    }
+                )
+            }
+        """.trimIndent()
+    }
+
+    private fun generatedGetAssistedFactory(file: OutputStream) {
+        file += """
+                        
+            @Composable
+            private inline fun <reified T> getAssistedFactory() = EntryPointAccessors.fromActivity(
+                LocalContext.current as Activity,
+                T::class.java
+            )
+
+        """.trimIndent()
     }
 }
 
