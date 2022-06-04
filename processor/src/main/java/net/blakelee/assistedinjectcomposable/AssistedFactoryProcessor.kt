@@ -146,7 +146,7 @@ class AssistedFactoryProcessor(
             
             @EntryPoint
             @InstallIn(ActivityComponent::class)
-            internal interface ${returnType}_FactoryProvider {
+            private interface ${returnType}_FactoryProvider {
                 fun ${returnType}Factory(): $factoryType
             }
             
