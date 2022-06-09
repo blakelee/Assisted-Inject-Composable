@@ -7,6 +7,5 @@ plugins {
 val kspVersion: String by project
 
 dependencies {
-    api(project(":annotations"))
     implementation("com.google.devtools.ksp:symbol-processing-api:$kspVersion")
 }

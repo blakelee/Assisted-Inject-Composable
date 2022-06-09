@@ -27,7 +27,6 @@ rootProject.name = "Assisted Inject Composable"
 
 include (":sample")
 include (":processor")
-include (":annotations")
 
 buildCache {
     local {
