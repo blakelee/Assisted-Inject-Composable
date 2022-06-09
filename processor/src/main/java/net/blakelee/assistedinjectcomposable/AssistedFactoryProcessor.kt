@@ -37,6 +37,7 @@ class AssistedFactoryProcessor(
 
         generatedGetAssistedFactory(file)
         generateCreateAssistedViewModel(file)
+        generateGetActivity(file)
 
         file.close()
         val unableToProcess = symbols.filterNot { it.validate() }.toList()
@@ -182,6 +183,8 @@ class AssistedFactoryProcessor(
             package $packageName
             
             import android.app.Activity
+            import android.content.Context
+            import android.content.ContextWrapper
             import androidx.compose.runtime.Composable
             import androidx.compose.ui.platform.LocalContext
             import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
@@ -215,6 +218,7 @@ class AssistedFactoryProcessor(
                     }
                 )
             }
+            
         """.trimIndent()
     }
 
@@ -223,10 +227,25 @@ class AssistedFactoryProcessor(
                         
             @Composable
             private inline fun <reified T> getAssistedFactory() = EntryPointAccessors.fromActivity(
-                LocalContext.current as Activity,
+                LocalContext.current.getActivity(),
                 T::class.java
             )
 
+        """.trimIndent()
+    }
+
+    private fun generateGetActivity(file: OutputStream) {
+        file += """
+            
+            @Composable
+            private fun Context.getActivity(): Activity {
+                return when(this) {
+                    is Activity -> this
+                    is ContextWrapper -> baseContext.getActivity()
+                    else -> throw Exception("Can't find Activity")
+                }
+            }
+            
         """.trimIndent()
     }
 }
